@@ -1,7 +1,8 @@
+
 const axios = require('axios');
 
 // Get current weather using city coordinates
-async function getWeather(latitude, longitude) {
+async function getWeather(latitude, longitude, units = 'celsius') {
   try {
     const response = await axios.get(
       'https://api.open-meteo.com/v1/forecast',
@@ -10,9 +11,11 @@ async function getWeather(latitude, longitude) {
           latitude,
           longitude,
           current: 'temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m',
+          temperature_unit: units,
+          wind_speed_unit: 'kmh',
           timezone: 'auto'
         },
-        timeout: 10000
+        timeout: Number(process.env.WEATHER_TIMEOUT) || 10000
       }
     );
 

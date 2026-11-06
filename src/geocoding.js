@@ -13,7 +13,7 @@ async function getCoordinates(city) {
           language: 'en',
           format: 'json'
         },
-        timeout: 10000
+        timeout: Number(process.env.WEATHER_TIMEOUT) || 10000
       }
     );
 

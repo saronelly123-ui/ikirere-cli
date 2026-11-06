@@ -1,29 +1,61 @@
-const { readJSON, writeJSON, saveHistory } = require('./storage');
-const { saveHistory } = require('./storage');
+
+const os = require('node:os');
+
+const {
+  readJSON,
+  writeJSON,
+  saveHistory
+} = require('./storage');
+
 const { getCoordinates } = require('./geocoding');
 const { getWeather } = require('./weather');
 
-// Display weather information for a city
+// Get weather information for a city
 async function weatherCommand(city) {
   try {
-    console.log(`\nGetting weather for ${city}...\n`);
+    const settings = await readJSON('settings.json', {
+      units: process.env.WEATHER_UNITS || 'celsius',
+      defaultCity: process.env.WEATHER_DEFAULT_CITY || 'Kigali'
+    });
 
-    // Find city coordinates
-    const location = await getCoordinates(city);
+    const selectedCity = city || settings.defaultCity;
+    const units = settings.units || 'celsius';
+    const symbol = units === 'fahrenheit' ? '°F' : '°C';
 
-    // Fetch current weather
+    console.log(`\nGetting weather for ${selectedCity}...\n`);
+
+    const location = await getCoordinates(selectedCity);
+
     const weather = await getWeather(
       location.latitude,
-      location.longitude
+      location.longitude,
+      units
     );
-    // Save this weather search
-await saveHistory({
-  city: location.name,
-  country: location.country,
-  temperature: weather.temperature_2m,
-  date: new Date().toISOString()
 
-});
+    await saveHistory({
+      city: location.name,
+      country: location.country,
+      temperature: weather.temperature_2m,
+      units,
+      date: new Date().toISOString()
+    });
+
+    console.log('================================');
+    console.log(` WEATHER IN ${location.name.toUpperCase()}`);
+    console.log(` Country: ${location.country}`);
+    console.log('================================');
+    console.log(` Temperature: ${weather.temperature_2m} ${symbol}`);
+    console.log(` Feels like: ${weather.apparent_temperature} ${symbol}`);
+    console.log(` Humidity: ${weather.relative_humidity_2m}%`);
+    console.log(` Wind speed: ${weather.wind_speed_10m} km/h`);
+    console.log('================================');
+
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
 // Add a city to favourites
 async function addFavorite(city) {
   const favorites = await readJSON('favorites.json', []);
@@ -38,7 +70,6 @@ async function addFavorite(city) {
   }
 
   favorites.push(city);
-
   await writeJSON('favorites.json', favorites);
 
   console.log(`${city} has been added to your favourites!`);
@@ -78,27 +109,99 @@ async function removeFavorite(city) {
   console.log(`${city} has been removed from your favourites.`);
 }
 
-    // Display results
-    console.log('================================');
-    console.log(` WEATHER IN ${location.name.toUpperCase()}`);
-    console.log(` Country: ${location.country}`);
-    console.log('================================');
-    console.log(` Temperature: ${weather.temperature_2m} °C`);
-    console.log(` Feels like: ${weather.apparent_temperature} °C`);
-    console.log(` Humidity: ${weather.relative_humidity_2m}%`);
-    console.log(` Wind speed: ${weather.wind_speed_10m} km/h`);
-    console.log('================================');
+// Display weather search history
+async function historyCommand() {
+  const history = await readJSON('history.json', []);
 
-  } catch (error) {
-    console.error(`Error: ${error.message}`);
-    process.exitCode = 1;
+  if (history.length === 0) {
+    console.log('No weather search history found.');
+    return;
   }
+
+  console.log('\nWeather Search History:');
+
+  history.forEach((entry, index) => {
+    const symbol = entry.units === 'fahrenheit' ? '°F' : '°C';
+
+    console.log(`\n${index + 1}. ${entry.city}, ${entry.country}`);
+    console.log(`   Temperature: ${entry.temperature} ${symbol}`);
+    console.log(`   Date: ${new Date(entry.date).toLocaleString()}`);
+  });
 }
 
+// Display current settings
+async function showSettings() {
+  const settings = await readJSON('settings.json', {
+    units: process.env.WEATHER_UNITS || 'celsius',
+    defaultCity: process.env.WEATHER_DEFAULT_CITY || 'Kigali'
+  });
 
+  console.log('\nCurrent Settings:');
+  console.log(`Default city: ${settings.defaultCity}`);
+  console.log(`Temperature unit: ${settings.units}`);
+}
+
+// Change default city
+async function setDefaultCity(city) {
+  if (!city) {
+    console.error('Please provide a city name.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const settings = await readJSON('settings.json', {
+    units: process.env.WEATHER_UNITS || 'celsius',
+    defaultCity: process.env.WEATHER_DEFAULT_CITY || 'Kigali'
+  });
+
+  settings.defaultCity = city;
+
+  await writeJSON('settings.json', settings);
+
+  console.log(`Default city changed to ${city}.`);
+}
+
+// Change temperature unit
+async function setTemperatureUnit(unit) {
+  if (!['celsius', 'fahrenheit'].includes(unit)) {
+    console.error('Use celsius or fahrenheit.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const settings = await readJSON('settings.json', {
+    units: process.env.WEATHER_UNITS || 'celsius',
+    defaultCity: process.env.WEATHER_DEFAULT_CITY || 'Kigali'
+  });
+
+  settings.units = unit;
+
+  await writeJSON('settings.json', settings);
+
+  console.log(`Temperature unit changed to ${unit}.`);
+}
+
+// Display system information
+function systemCommand() {
+  console.log('\nSystem Information:');
+  console.log('======================');
+  console.log(`Operating System: ${os.platform()}`);
+  console.log(`OS Version: ${os.release()}`);
+  console.log(`Architecture: ${os.arch()}`);
+  console.log(`Hostname: ${os.hostname()}`);
+  console.log(`Home Directory: ${os.homedir()}`);
+  console.log('======================');
+}
+
+// Export commands
 module.exports = {
   weatherCommand,
   addFavorite,
   listFavorites,
-  removeFavorite
+  removeFavorite,
+  historyCommand,
+  showSettings,
+  setDefaultCity,
+  setTemperatureUnit,
+  systemCommand
 };
